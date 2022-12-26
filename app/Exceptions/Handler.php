@@ -4,6 +4,12 @@ namespace App\Exceptions;
 
 use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
 use Throwable;
+use \Illuminate\Database\Eloquent\ModelNotFoundException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpFoundation\Response;
+use App\Exceptions\ApiNoDataExistException;
+use Illuminate\Validation\ValidationException; 
 
 class Handler extends ExceptionHandler
 {
@@ -45,6 +51,32 @@ class Handler extends ExceptionHandler
     {
         $this->reportable(function (Throwable $e) {
             //
+        });
+
+        $this->renderable(function (\Exception $e, $request) {
+            if ($request->is('api/*')) {
+                $message = 'サーバーエラー';
+                $code = Response::HTTP_INTERNAL_SERVER_ERROR;
+                if ($e instanceof ApiNoDataExistException) {
+                    $message =  '該当のタスクは見つかりませんでした。';
+                    $code = Response::HTTP_NOT_FOUND;
+                } elseif ($e instanceof ModelNotFoundException) {
+                    $message = 'Record not found';
+                    $code =  Response::HTTP_NOT_FOUND;
+                } elseif ($e instanceof NotFoundHttpException) {
+                    $message = 'Not found';
+                    $code =  Response::HTTP_NOT_FOUND;
+                } elseif ($e instanceof ValidationException) {
+                    $message = implode(',', $e->validator->getMessageBag()->all());
+                    $code = Response::HTTP_BAD_REQUEST;
+                } elseif ($e instanceof HttpException) {
+                    $message = $e->getMessage();
+                    $code = $e->getStatusCode();
+                }
+                return response()->json([
+                    'message' => $message,
+                ], $code);
+            }
         });
     }
 }

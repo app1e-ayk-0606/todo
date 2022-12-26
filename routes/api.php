@@ -21,3 +21,7 @@ use App\Http\Controllers\TodoController;
 
 
 Route::get('/tasks', [TodoController::class, 'index']);
+Route::get('/tasks/{id}', [TodoController::class, 'detail']);
+Route::post('/tasks', [TodoController::class, 'create']);
+Route::put('/tasks/{id}', [TodoController::class, 'update']);
+Route::delete('/tasks/{id}', [TodoController::class, 'delete']);

@@ -6,6 +6,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 use App\Models\Todo;
+use App\Http\Requests\todo\DetailRequest;
+use App\Http\Requests\todo\CreateRequest;
+use App\Http\Requests\todo\UpdateRequest;
+use App\Http\Requests\todo\DeleteRequest;
+use App\Exceptions\ApiNoDataExistException;
+use App\Http\Resources\TodoCollection;
+use App\Http\Resources\TodoResource;
 
 class TodoController extends Controller
 {
@@ -17,41 +24,78 @@ class TodoController extends Controller
      */
     public function index(Request $request)
     {
-        $params = [
-            'title'    => $request->input('title', null),
-            'start_at' => $request->input('start_at', null),
-            'end_at'   => $request->input('end_at', null),
-        ];
+        $todos = Todo::when($request->input('title'), function ($query, $title) {
+            $query->where('title', 'LIKE', "%{$title}%");
+        })
+            ->when($request->input('start_at'), function ($query, $startAt) {
+                $query->where('start_at', $startAt);
+            })
+            ->when($request->input('end_at'), function ($query, $endAt) {
+                $query->where('end_at', $endAt);
+            })
+            ->get();
 
-        try {
-            $query = Todo::query();
-            if (isset($params['title'])) {
-                $query->Where('title', 'LIKE', "%{$params['title']}%");
-            }
-            if (isset($params['start_at'])) {
-                $query->Where('start_at', $params['start_at']);
-            }
-            if (isset($params['end_at'])) {
-                $query->Where('end_at', $params['end_at']);
-            }
-            $todos = $query->get(['id', 'title']);
-
-            if ($todos->isEmpty()) {
-                $todos = '該当のタスクは見つかりませんでした。';
-            }
-
-            $result = [
-                'status' => Response::HTTP_OK,
-                'list' => $todos
-            ];
-            return response()->json($result);
-        } catch (\Exception $e) {
-            Log::error($e);
-            $result = [
-                'status' => Response::HTTP_INTERNAL_SERVER_ERROR,
-                'message' => 'エラーが発生しました。'
-            ];
-            return response()->json($result);
+        if ($todos->isEmpty()) {
+            throw new ApiNoDataExistException();
+            // abort(404, '該当のタスクは見つかりませんでした。');
         }
+        return new TodoCollection($todos);
+    }
+
+    /**
+     * 指定したタスクを取得
+     *
+     * @param DetailRequest $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function detail(DetailRequest $request, $id)
+    {
+        $todo = Todo::where('id', $id)->whereNull('deleted_at')->firstOrFail();
+        return new TodoResource($todo);
+    }
+
+    /**
+     * タスクを新規登録する
+     *
+     * @param CreateRequest $request
+     * @return JsonResponse
+     */
+    public function create(CreateRequest $request)
+    {
+        $todo = Todo::create($request->all());
+        return new TodoResource($todo);
+    }
+
+    /**
+     * タスクを更新する
+     *
+     * @param UpdateRequest $request
+     * @return JsonResponse
+     */
+    public function update(UpdateRequest $request, $id)
+    {
+        if (!Todo::where('id', $id)->whereNull('deleted_at')->exists()) {
+            throw new ApiNoDataExistException();
+        }
+        Todo::where('id', $id)->update($request->all());
+        $todo = Todo::where('id', $id)->first();
+        return new TodoResource($todo);
+    }
+
+    /**
+     * タスクを削除する
+     *
+     * @param DeleteRequest $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function delete(DeleteRequest $request, $id)
+    {
+        if (!Todo::where('id', $id)->whereNull('deleted_at')->exists()) {
+            throw new ApiNoDataExistException();
+        }
+
+        Todo::where('id', $id)->delete();
     }
 }
